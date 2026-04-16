@@ -1,0 +1,127 @@
+---
+title: "Práctica 10 Ensamblaje de genomas"
+author: "Ana Mayordomo"
+format: html
+embed-resources: true
+engine: knitr
+---
+
+# Práctica 10. Ensamblaje de genomas
+
+## Hifiasm
+Descargamos el programa y lo añadimos a PATH
+
+## Datos
+Vamos a usar lecturas HiFi de un único individuo de la planta Arabidopsis thaliana, ecotipo Columbia (Col-0), con la tecnología SMRT de PacBio. 
+
+El path relativo del archivo es ../../data/At4.10.fa.gz
+
+## Revisión de los datos
+Los datos están en formato FASTA porque contienen sólo lecturas de alta calidad, y hifiasm no utiliza la información de las calidades de cada base. 
+
+Antes de empezar el ensamblaje hay que tener una idea de la cantidad de datos que tenemos.
+
+Ejercicio 1
+¿Cuántas secuencias contiene el archivo? Para averiguarlo contamos las líneas que empiezan con ", por lo que encontramos 13812 secuencias. 
+
+zgrep hace lo mismo que el grep pero para archivos comprimidos. 
+```{bash}
+# 1. ¿Cuántas secuencias contiene el archivo?
+# Contamos las líneas que empiezan por ">"
+zgrep -c "^>" ../../data/At4.10.fa.gz
+```
+¿Qué longitudes mínima, media y máxima tienen las secuencias?
+  Longitud mínima: 2942
+  Longitud máxima: 59075
+  Longitud media: 18143,6
+  
+¿Cuál es el número total de bases?
+Total de bases: 250599484
+
+```{bash}
+# 2. ¿Longitudes mínima, media, máxima y número total de bases?
+# Usamos awk para procesar las secuencias sin descomprimir el archivo en disco. Es un lenguaje que nos srive para manipular corrientes de texto.
+zcat ../../data/At4.10.fa.gz | awk '
+/^>/ {
+    if (seqlen > 0) {
+        sum += seqlen;
+        count++;
+        if (seqlen > max) max = seqlen;
+        if (seqlen < min || min == 0) min = seqlen;
+    }
+    seqlen = 0;
+    next;
+}
+{
+    seqlen += length($0);
+}
+END {
+    if (seqlen > 0) { # Procesar la última secuencia
+        sum += seqlen;
+        count++;
+        if (seqlen > max) max = seqlen;
+        if (seqlen < min || min == 0) min = seqlen;
+    }
+    print "Total de bases: " sum;
+    print "Longitud mínima: " min;
+    print "Longitud máxima: " max;
+    print "Longitud media: " sum/count;
+}'
+```
+
+Si se estimara que el genoma a ensamblar fuera de sólo 19 millones de bases, ¿cuál sería la cobertura esperada?
+En termino medio cada nucleótido debe haber sido leido unas 13,1894 veces, en término medio. El problema con la cobertura es que es muy dispar. Por eso lo mejor serían coberturas de 30. 
+250599484/19000000
+
+Si quisieramos diferenciar el materno del paterno necesitaríamos el doble. 
+
+## Ensamblaje
+El programa hifiasm produce varios archivos de salida. Por lo que crearemos una carpeta "asm1" para guardar los archivos de hoy.
+
+```{bash}
+#| cache: true
+if [ ! -e asm1/At4.bp.p_ctg.gfa ]; then
+ $HOME/bin/hifiasm/hifiasm -o asm1/At4 -t 2 -f 0 ../../data/At4.10.fa.gz 2> asm1/hifiasm.log
+fi
+```
+
+Explicación del código anterior: 
+o asm1/At4: usa el prefijo asm1/At4 para los archivos de salida.
+
+t 2: usa dos procesadores. Por defecto usaría uno.
+
+f 0: inhabilita el uso de un filtro de Bloom durante la corrección de errores, que ocuparía 16 Gb de memoria.
+
+../../data/At4.10.fa.gz: archivo con los datos de partida.
+
+2> asm1/hifiasm.log: guarda los numerosos mensajes que hifiasm envía al error estándar en un archivo asm1/hifiasm.log. Esto evita que esos mensajes se acumulen en el informe HTML.
+
+
+### Ejercicio 2
+Consulta la ayuda de hifiasm (hifiasm -h) y contesta las preguntas siguientes:
+
+¿Los parámetros corresponden al ensamblaje de un genoma haploide o diploide? Según la ayuda, los archivos tienen sufijos .bp.hap1.p_ctg y .bp.hap2.p_ctg, que equivalen al paterno y materno, por lo que corresponde a un genoma diploide. 
+
+¿Qué nivel de eliminación de duplicaciones hemos aplicado? (El paso de eliminar duplicaciones sirve para que las zonas de alta heterocigosidad no sean ensambladas como contigs diferentes).El valor por defecto es 3. 
+
+Si tuvieramos lecturas ultra-largas, ¿con qué opción o argumento añadiríamos esa información?
+Con --uI [r1.fq, r2.fq...]
+
+## Evaluación del resultado
+### Ejercicio 3
+Consulta la descripción de los archivos de salida y contesta las preguntas siguientes:
+
+¿Dónde están las secuencias que componen el ensamblaje?
+Las secuencias que componen el ensamblaje se encuentra: At4.bp.p_ctg.gfa (contiene el ensamblaje más completo). Luego para los haplotipos: At4.bp.hap1.p_ctg.gfa y At4.bp.hap2.p_ctg.gfa.
+
+En los archivos .gfa, ¿qué son las líneas que empiezan por ‘A’?
+A corresponde a alineamientos, mientras que S a secuencias.
+
+¿Qué información tiene los archivos .bed?
+Las coordenadas de las regiones de baja calidad. 
+
+¿Cuál es la cobertura media estimada de las secuencias homocigotas? Es 12. 
+¿Y la de las heterocigotas? No aparece ningún pico que podría indicar que se trate de un organismo homocigoto.
+
+## Calidad del ensamblaje
+
