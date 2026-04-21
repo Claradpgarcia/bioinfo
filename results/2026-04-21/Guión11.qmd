@@ -1,0 +1,116 @@
+---
+title: "guio11"
+author: "Ana Mayordomo"
+format: html
+embed-resources: true
+engine: knitr
+---
+
+# Práctia 11. Anotación
+En esta práctica vamos a trabajar con los resultados de la anotación estructural realizada sobre el ensamblaje de la práctica 10.  
+
+Las secuencias que vamos a anotar son el ensamblaje obtenido en la práctica anterior, que se encuentran en una carpeta results/2026-04-16
+
+Usaremos las 6023 proteínas que sabemos que codifica el cromosoma 4 de Arabidopsis thalina. Las podéis descargar de Uniprot. Se pueden encontrar en la carpeta data.
+
+## Modificación de los nombres de las proteínas
+Al descargar las proteínas del cromosoma 4 de A. thaliana, el archivo FASTA contiene cabeceras demasiado extensas. Para facilitar el trabajo de GALBA vamos a modificar las cabeceras o nombres de las secuencias. 
+
+
+### Ejercicio 1
+Sabiendo que una forma de hacerlo es la siguiente, incluye la orden en un bloque de Bash de tu documento de Quarto de tal manera que el archivo de entrada esté en tu carpeta data y el de salida en la misma carpeta de trabajo de la práctica actual, y además, que sólo se ejecute si el archivo de salida proteinas.fasta no existe.
+
+```{bash}
+if [ ! -e proteinas.fasta ]; then
+awk '(/^>/){split($1, A, /\|/); print ">" A[2]}(/^[^>]/){print $0}' ../../data/uniprot.fasta > proteinas.fasta
+fi
+```
+
+## Análisis de los resultados de RepeatModeler
+Utilizan una versión de blast ajustada, de mi ensamblaje ha hecho una base de datos de blast. 
+
+### Ejercicio 2
+Explora los resultados de RepeatModeler y trata de contestar las preguntas siguientes.
+
+¿Cuántas familias de elementos transponibles se han encontrado?
+24 families found
+
+¿Cuánto duró la ejecución del programa? 
+Program Time: 01:02:16 (hh:mm:ss)
+
+¿Cuál dirías que es el archivo de salida más importante?
+AT4-rmod.log contiene un resumen del trabajo realizado y me permite ver y contestar las preguntas de forma rápida. Sin emabrgo, el archivo AT4-families.fa contiene las secuencias consenso de las familias de elementos transponibles. 
+At4-families.stk: son los alineamiento en formato stk.
+
+Son secuencias LTR (long). Gypsy que es la clase de elemento transponible de la que se trata. Hay 98 familias que se parecen a la secuencia consenso. 
+
+El repeatmodeler es más útil cuando el organismo es desconocino y no tenemos elementos transponibles conocidos. 
+
+## Suavizar la máscara
+RepeatMasker ha sustituído todos los elementos trasponibles y repeticiones por Ns, con lo que se ha perdido la información de la secuencia original en esas regiones. El programa GALBA recomienda partir de un ensamblaje con máscara suave, donde las regiones repetitivas están marcadas con letra minúscula. Para convertir la máscara dura en una máscara suave, utilizaremos bedtools. 
+
+### Ejercicio 3
+
+Instala el programa bedtools siguiendo las instrucciones oportunas para tu sistema en la página oficial
+```{bash}
+echo 'export PATH=$PATH:~/bin/bedtools' >> ~/.bashrc
+```
+
+
+Utiliza el ensamblaje original como archivo FASTA de entrada y el archivo GFF que ha producido RepetaMasker como coordenadas de las regiones a enmascarar. Lee el manual de bedtools maskfasta en este enlace y genera el ensamblaje con máscara suave llamado At4.soft.fa.
+
+```{bash}
+if [ ! -e "At4.soft.fa" ]; then bedtools maskfasta -fi ../2026-04-16/asm1/At4.fa -bed RepeatMaskerResults/RM01/At4.fa.out.gff -fo At4.soft.fa -soft
+fi
+```
+
+El archivo gff nos dice las coordenadas de donde se encuentra cada elemento trasponible. Esta opción se la hemos tenido que pedir. 
+
+## GALBA
+Para ejecutar GALBA ha sido necesario crear algunas variables de entorno que indican donde puede GALBA encontrar un par de ejecutables más. Para facilitar la reproducibilidad, este tipo de definiciones deben aparecer al principio del bloque, donde son más visibles, para que sean fácilmente modificadas cuando las órdenes vayan a ejecutarse en otro ordenador.
+
+Es un scrip de pl. 
+
+### Ejercicio 4
+Incluye en tu documento de Quarto un bloque de código (pero no ejecutable, con la opción eval: false) como el anterior, donde los caminos TSERBA y a MINIPROTHINT se correspondan con tu propia carpeta bin, aunque no los tengas instalados.
+
+```{bash}
+#| eval: false
+export TSEBRA_PATH=/home/joiglu/bin/TSEBRA/bin/
+export MINIPROTHINT_PATH=/home/joiglu/bin/miniprothint/
+
+galba.pl --species="Arabidopsis thaliana" \
+         --genome=At4.soft.fa \
+         --prot_seq=proteinas.fasta
+```
+
+Galba también puede utilizar RNAseq. 
+
+### Ejercicio 5
+Échales un vistazo a los archivos de salida de GALBA y trata de sacar algo en claro.
+
+Utiliza el miniprot para mapear las evidencias de las secuencias de las proteínas que hemos descargado contra el ensambleje. Luego utiliza el Augustus para entrenarse e identificar bien los genes, refinando el resto con varias rondas. 
+
+    galba.gtf --> contiene la anotación final de los genes en un formato gtf. 
+
+    galba.aa --> contienen las secuencias de aminoácido, es decir, las proteínas en formato FASTA. 
+    
+    galba.codingseq --> son las secuencias de nucleótidos codificantes en formato FASTA
+    
+    hintsfile.gff --> muestras las pistas que ha sacado de las proteínas que le he dado y muestra los alineamientos que ayudaron a entrenar a Augustus. 
+    
+    miniprot_trainingGenes.gtf --> conjunto de genes utizados para el entrenamiento inicial. 
+    
+    prot_seq_all.fa --> proteínas de entrada 
+    
+    genome_header.map --> diccionario para saber que nombre acortado con galba corresponde con el nombre de cromosoma original
+    
+    GALBA.log --> resumen de todo el proceso, el paso a paso y el timepo que tarda 
+    
+    optimize_agustus.stdout --> detalles tecnicos de como se ajustaron los parámetros para Augustus. 
+    
+    what-to-cite.txt --> recordatorio de los autores que tengo que citar si quiero publicarlo
+    
+    errors --> si hay algún error aparerá ahí
+
+
